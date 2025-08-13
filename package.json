@@ -1,11 +1,15 @@
 {
   "name": "mobile-service-booking",
   "version": "1.0.0",
-  "type": "module",
+  "description": "Mobile service booking system with Supabase and Netlify Functions",
+  "main": "index.js",
+  "scripts": {},
   "dependencies": {
-    "@supabase/supabase-js": "^2.0.0",
+    "pdfkit": "^0.13.0",
     "nodemailer": "^6.9.3",
     "qrcode": "^1.5.1",
-    "pdfmake": "^0.2.7"
-  }
+    "node-fetch": "^3.3.2",
+    "@supabase/supabase-js": "^2.0.0"
+  },
+  "type": "module"
 }
