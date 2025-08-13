@@ -1,121 +1,70 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Super Admin Dashboard</title>
-<style>
-body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: auto; }
-h2 { margin-top: 40px; }
-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-button { margin: 2px; }
-input, select { margin: 5px 0; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Super Admin Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    h1, h2 { margin-top: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ddd; padding: 8px; }
+    th { background: #f4f4f4; }
+    button { padding: 6px 12px; cursor: pointer; }
+    #connection-status ul { list-style: none; padding: 0; }
+    #connection-status li { margin: 5px 0; }
+  </style>
 </head>
 <body>
-<h1>Super Admin Dashboard</h1>
-<div id="connection-status">
-  <h2>Connection Status</h2>
-  <ul>
-    <li>Database: <span id="db-status">Checking...</span></li>
-    <li>DVSA API: <span id="dvsa-status">Checking...</span></li>
-    <li>Gmail: <span id="gmail-status">Checking...</span></li>
-  </ul>
-</div>
-<section>
-<h2>Garages</h2>
-<table id="garageTable">
-  <thead>
-    <tr><th>ID</th><th>Name</th><th>Status</th><th>Action</th></tr>
-  </thead>
-  <tbody></tbody>
-</table>
-<button id="refreshGarages">Refresh Garages</button>
-</section>
+  <h1>Super Admin Dashboard</h1>
 
-<section>
-<h2>Bookings</h2>
-<table id="bookingTable">
-  <thead>
-    <tr><th>ID</th><th>Customer</th><th>Garage</th><th>Vehicle</th><th>Date</th><th>Time</th><th>Status</th><th>Action</th></tr>
-  </thead>
-  <tbody></tbody>
-</table>
-<button id="refreshBookings">Refresh Bookings</button>
-</section>
+  <!-- Connection Status -->
+  <div id="connection-status">
+    <h2>Connection Status</h2>
+    <ul>
+      <li>Database: <span id="db-status">Checking...</span></li>
+      <li>DVSA API: <span id="dvsa-status">Checking...</span></li>
+      <li>Gmail: <span id="gmail-status">Checking...</span></li>
+    </ul>
+  </div>
 
-<section>
-<h2>Verify Booking</h2>
-<input type="text" id="verifyInput" placeholder="Enter Booking ID or scan QR">
-<button id="verifyBtn">Verify</button>
-<div id="verifyResult"></div>
-</section>
+  <!-- Garages -->
+  <h2>Garages</h2>
+  <table id="garages-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Status</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <button onclick="loadGarages()">Refresh Garages</button>
 
-<script type="module">
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+  <!-- Bookings -->
+  <h2>Bookings</h2>
+  <table id="bookings-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Customer</th>
+        <th>Garage</th>
+        <th>Vehicle</th>
+        <th>Date</th>
+        <th>Time</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <button onclick="loadBookings()">Refresh Bookings</button>
 
-const supabase = createClient('YOUR_SUPABASE_URL','YOUR_SUPABASE_KEY');
+  <!-- Verify Booking -->
+  <h2>Verify Booking</h2>
+  <input type="text" id="verify-id" placeholder="Enter Booking ID or scan QR">
+  <button onclick="verifyBooking()">Verify</button>
 
-const garageTable = document.querySelector('#garageTable tbody');
-const bookingTable = document.querySelector('#bookingTable tbody');
-const verifyResult = document.getElementById('verifyResult');
-
-// Load Garages
-async function loadGarages(){
-  garageTable.innerHTML='';
-  const { data, error } = await supabase.from('garages').select('*');
-  if(error) return console.error(error);
-  data.forEach(g=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${g.id}</td><td>${g.name}</td><td>${g.status}</td>
-      <td><button onclick="toggleGarage(${g.id}, '${g.status}')">${g.status==='Working'?'Set Offline':'Set Working'}</button></td>`;
-    garageTable.appendChild(tr);
-  });
-}
-
-// Toggle garage status
-window.toggleGarage=async(id,status)=>{
-  const newStatus=status==='Working'?'Offline':'Working';
-  await supabase.from('garages').update({status:newStatus}).eq('id',id);
-  loadGarages();
-};
-
-// Load Bookings
-async function loadBookings(){
-  bookingTable.innerHTML='';
-  const { data, error } = await supabase.from('bookings').select('*,garages(name)');
-  if(error) return console.error(error);
-  data.forEach(b=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${b.id}</td><td>${b.name}</td><td>${b.garages.name}</td>
-      <td>${b.vehicle_registration}</td><td>${b.date}</td><td>${b.time}</td>
-      <td>${b.checked_in?'Checked In':'Pending'}</td>
-      <td><button onclick="markCheckIn(${b.id})">Check In</button></td>`;
-    bookingTable.appendChild(tr);
-  });
-}
-
-// Check in booking
-window.markCheckIn=async(id)=>{
-  await supabase.from('bookings').update({checked_in:true}).eq('id',id);
-  loadBookings();
-};
-
-// Verify booking
-document.getElementById('verifyBtn').addEventListener('click', async ()=>{
-  const id=document.getElementById('verifyInput').value;
-  const { data, error } = await supabase.from('bookings').select('*').eq('id',id).single();
-  if(error||!data){ verifyResult.innerText='Booking not found'; return; }
-  verifyResult.innerHTML=`Booking Verified ✅<br>Name: ${data.name}<br>Vehicle: ${data.vehicle_registration}<br>Garage ID: ${data.garage_id}<br>Date: ${data.date} Time: ${data.time}`;
-  await supabase.from('bookings').update({checked_in:true}).eq('id',id);
-});
-
-document.getElementById('refreshGarages').addEventListener('click',loadGarages);
-document.getElementById('refreshBookings').addEventListener('click',loadBookings);
-
-loadGarages();
-loadBookings();
-</script>
+  <script src="admin.js"></script>
 </body>
 </html>
