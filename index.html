@@ -4,41 +4,130 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mobile Service Booking</title>
-<link rel="stylesheet" href="styles.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litepicker/dist/css/litepicker.css">
+<style>
+body { font-family: sans-serif; padding: 20px; max-width: 500px; margin: auto; }
+label, input, select, button { display: block; width: 100%; margin: 10px 0; }
+ul { list-style: none; padding: 0; border: 1px solid #ccc; max-height: 100px; overflow-y: auto; }
+li { padding: 5px; cursor: pointer; }
+li:hover { background: #eee; }
+</style>
 </head>
 <body>
-<div class="container">
-  <h1>Book Your Service</h1>
+<h1>Book Mobile Service</h1>
 
-  <div id="garage-container">
-    <label for="garage-select">Select Garage:</label>
-    <select id="garage-select"></select>
-  </div>
+<form id="bookingForm">
+  <label>Garage:</label>
+  <select id="garageSelect" required></select>
 
-  <label for="calendar">Pick a Date:</label>
-  <input id="calendar" readonly>
+  <label>Customer Name:</label>
+  <input type="text" id="name" placeholder="Your name" required>
 
-  <label for="time-select">Select Time:</label>
-  <select id="time-select"></select>
+  <label>Email:</label>
+  <input type="email" id="email" placeholder="you@example.com" required>
 
-  <label for="service-type">Service Type:</label>
-  <select id="service-type">
+  <label>Vehicle Registration:</label>
+  <input type="text" id="vehicleReg" placeholder="AB12 CDE" autocomplete="off" required>
+  <ul id="suggestions"></ul>
+
+  <label>Service Type:</label>
+  <select id="serviceType" required>
     <option value="Standard">Standard (1 hr)</option>
     <option value="Bundle">Bundle (1.5 hr)</option>
   </select>
 
-  <label for="name">Your Name:</label>
-  <input id="name" type="text">
+  <label>Date:</label>
+  <input type="date" id="serviceDate" required>
 
-  <label for="email">Email:</label>
-  <input id="email" type="email">
+  <label>Time:</label>
+  <input type="time" id="serviceTime" required min="09:00" max="16:30" step="900">
 
-  <button id="book-btn">Book Now</button>
-  <div id="confirmation"></div>
-</div>
+  <button type="submit">Book Now</button>
+</form>
 
-<script src="https://cdn.jsdelivr.net/npm/litepicker/dist/bundle.js"></script>
-<script type="module" src="main.js"></script>
+<p id="status"></p>
+
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+const supabase = createClient(
+  'YOUR_SUPABASE_URL',
+  'YOUR_SUPABASE_KEY'
+);
+
+const garageSelect = document.getElementById('garageSelect');
+const vehicleRegInput = document.getElementById('vehicleReg');
+const suggestions = document.getElementById('suggestions');
+const statusP = document.getElementById('status');
+
+async function loadGarages() {
+  const { data, error } = await supabase.from('garages').select('*').eq('status','Working');
+  if(error) { console.error(error); return; }
+  data.forEach(g => {
+    const option = document.createElement('option');
+    option.value = g.id;
+    option.text = g.name;
+    garageSelect.appendChild(option);
+  });
+}
+loadGarages();
+
+// Vehicle registration autocomplete
+vehicleRegInput.addEventListener('input', async () => {
+  const query = vehicleRegInput.value;
+  if(query.length < 3){ suggestions.innerHTML = ''; return; }
+  const res = await fetch(`/.netlify/functions/vehicleLookup?reg=${query}`);
+  const data = await res.json();
+  suggestions.innerHTML = '';
+  data.forEach(v => {
+    const li = document.createElement('li');
+    li.innerText = `${v.registration} - ${v.make} ${v.model}`;
+    li.addEventListener('click', () => {
+      vehicleRegInput.value = v.registration;
+      suggestions.innerHTML = '';
+    });
+    suggestions.appendChild(li);
+  });
+});
+
+// Booking submission
+document.getElementById('bookingForm').addEventListener('submit', async e => {
+  e.preventDefault();
+
+  let latitude=null, longitude=null;
+  if(navigator.geolocation){
+    await new Promise(resolve => {
+      navigator.geolocation.getCurrentPosition(pos => {
+        latitude = pos.coords.latitude;
+        longitude = pos.coords.longitude;
+        resolve();
+      });
+    });
+  }
+
+  const booking = {
+    garage_id: parseInt(garageSelect.value),
+    name: document.getElementById('name').value,
+    email: document.getElementById('email').value,
+    vehicle_registration: vehicleRegInput.value,
+    service_type: document.getElementById('serviceType').value,
+    date: document.getElementById('serviceDate').value,
+    time: document.getElementById('serviceTime').value,
+    duration: document.getElementById('serviceType').value==='Bundle'?1.5:1,
+    latitude,
+    longitude
+  };
+
+  const { data, error } = await supabase.from('bookings').insert([booking]);
+  if(error){ statusP.innerText = 'Booking failed'; console.error(error); }
+  else { 
+    const bookingId = data[0].id;
+    await fetch('/.netlify/functions/sendTicket', {
+      method: 'POST',
+      body: JSON.stringify({ bookingId })
+    });
+    statusP.innerText = 'Booking successful! Ticket emailed ✅';
+  }
+});
+</script>
 </body>
 </html>
