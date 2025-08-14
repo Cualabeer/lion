@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Garage Booking Dashboard</title>
+<style>
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    background: #f0f2f5;
+    color: #333;
+}
+header {
+    background: #2c3e50;
+    color: #fff;
+    padding: 1rem;
+    text-align: center;
+    font-size: 1.8rem;
+    font-weight: bold;
+}
+.container {
+    max-width: 1000px;
+    margin: 2rem auto;
+    padding: 1.5rem;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+input, select, button {
+    margin: 0.5rem 0;
+    padding: 0.65rem;
+    font-size: 1rem;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    width: 100%;
+    max-width: 400px;
+}
+button {
+    background: #3498db;
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+button:hover { background: #2980b9; }
+.ticket {
+    border-left: 4px solid #3498db;
+    padding: 1rem;
+    margin: 1rem 0;
+    border-radius: 8px;
+    background: #fafafa;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.ticket .plate {
+    font-size: 1.8rem;
+    font-weight: bold;
+    color: #2c3e50;
+}
+.ticket button {
+    align-self: flex-start;
+    margin-top: 0.5rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+}
+#popup {
+    display: none;
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    font-weight: bold;
+    color: #fff;
+    z-index: 9999;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+#popup.error { background: #e74c3c; }
+#popup.success { background: #2ecc71; }
+.hidden { display: none; }
+h2 { margin-top: 0; }
+.role-buttons button {
+    width: auto;
+    margin-right: 1rem;
+}
+</style>
+</head>
+<body>
+
+<header>Garage Booking System</header>
+<div class="container">
+
+  <!-- Popup -->
+  <div id="popup"></div>
+
+  <!-- Login -->
+  <div id="loginDiv">
+    <h2>Login</h2>
+    <input type="email" id="email" placeholder="Email">
+    <input type="password" id="password" placeholder="Password">
+    <button id="loginBtn">Login</button>
+    <h3>Quick Test Roles</h3>
+    <div class="role-buttons">
+      <button id="loginSuperAdmin">Super Admin</button>
+      <button id="loginTestBusiness">Test Business</button>
+      <button id="loginExtraBusiness">Extra Business</button>
+    </div>
+  </div>
+
+  <!-- Super Admin Dashboard -->
+  <div id="superAdminDiv" class="hidden">
+    <h2>Super Admin Dashboard</h2>
+    <input type="text" id="searchBusiness" placeholder="Search by name/email">
+    <select id="filterStatus">
+      <option value="">All Status</option>
+      <option value="Pending">Pending</option>
+      <option value="Confirmed">Confirmed</option>
+      <option value="Completed">Completed</option>
+      <option value="Canceled">Canceled</option>
+    </select>
+    <div id="businessList"></div>
+    <button id="logoutAdminBtn">Logout</button>
+  </div>
+
+  <!-- Business Dashboard -->
+  <div id="businessDiv" class="hidden">
+    <h2>Business Dashboard</h2>
+    <h3>Create Booking</h3>
+    <input type="text" id="numberPlate" placeholder="Number Plate">
+    <input type="text" id="make" placeholder="Make">
+    <input type="text" id="model" placeholder="Model">
+    <input type="text" id="customerName" placeholder="Customer Name">
+    <input type="email" id="customerEmail" placeholder="Customer Email">
+    <input type="date" id="bookingDate">
+    <input type="time" id="bookingTime">
+    <input type="text" id="service" placeholder="Service">
+    <select id="bookingStatus">
+      <option value="Pending">Pending</option>
+      <option value="Confirmed">Confirmed</option>
+      <option value="Completed">Completed</option>
+      <option value="Canceled">Canceled</option>
+    </select>
+    <button id="createBookingBtn">Create Booking</button>
+
+    <h3>Your Bookings</h3>
+    <div id="businessBookings"></div>
+    <button id="logoutBusinessBtn">Logout</button>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js'
+const { jsPDF } = window.jspdf;
+
+const supabaseUrl = 'https://nqviprxiwdvuuhlxqdzc.supabase.co';
+const supabaseKey = 'YOUR_ANON_KEY';
+const supabase = createClient(supabaseUrl, supabaseKey)
+
+// Elements
+const loginDiv = document.getElementById('loginDiv')
+const superAdminDiv = document.getElementById('superAdminDiv')
+const businessDiv = document.getElementById('businessDiv')
+const emailInput = document.getElementById('email')
+const passwordInput = document.getElementById('password')
+const loginBtn = document.getElementById('loginBtn')
+const popup = document.getElementById('popup')
+const logoutAdminBtn = document.getElementById('logoutAdminBtn')
+const logoutBusinessBtn = document.getElementById('logoutBusinessBtn')
+const searchInput = document.getElementById('searchBusiness')
+const filterStatus = document.getElementById('filterStatus')
+
+// --- Popup helper ---
+function showPopup(message, isError = false){
+    popup.textContent = message;
+    popup.className = isError ? 'error' : 'success';
+    popup.style.display = 'block';
+    setTimeout(()=> popup.style.display='none', 3000);
+}
+
+// --- Login ---
+async function loginUser(email, password){
+    try{
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if(error) throw error;
+        const { data: userRow } = await supabase.from('users').select('*').eq('id', data.user.id).single();
+        if(!userRow) return showPopup('No user data found', true);
+
+        showPopup('Login successful!');
+        loginDiv.classList.add('hidden');
+        if(userRow.role === 'super_admin'){
+            superAdminDiv.classList.remove('hidden');
+            loadBusinesses();
+        } else {
+            businessDiv.classList.remove('hidden');
+            loadBusinessBookings(userRow.id);
+        }
+    } catch(err){
+        showPopup('Login failed: ' + err.message, true);
+    }
+}
+
+loginBtn.addEventListener('click', ()=>{
+    loginUser(emailInput.value, passwordInput.value)
+})
+
+// --- Quick test role buttons ---
+document.getElementById('loginSuperAdmin').addEventListener('click', ()=> loginUser('superadmin@demo.com','Admin123!'))
+document.getElementById('loginTestBusiness').addEventListener('click', ()=> loginUser('test@business.com','Test1234'))
+document.getElementById('loginExtraBusiness').addEventListener('click', ()=> loginUser('extra@business.com','Extra1234'))
+
+// --- Logout ---
+logoutAdminBtn.addEventListener('click', async ()=>{
+    await supabase.auth.signOut(); location.reload();
+})
+logoutBusinessBtn.addEventListener('click', async ()=>{
+    await supabase.auth.signOut(); location.reload();
+})
+
+// --- Super Admin: load businesses ---
+async function loadBusinesses(){
+    let query = supabase.from('users').select('*, bookings(*)').eq('role','business')
+    const search = searchInput.value
+    const status = filterStatus.value
+    if(search) query = query.ilike('name', `%${search}%`).or(`email.ilike.%${search}%`)
+    const { data: businesses, error } = await query
+    if(error) return showPopup('Error loading businesses: '+error.message,true)
+    const container = document.getElementById('businessList')
+    container.innerHTML = ''
+    businesses.forEach(b=>{
+        const div = document.createElement('div')
+        div.className='ticket'
+        let bookingsHTML = ''
+        if(b.bookings) b.bookings.forEach(book=>{
+            if(status && book.status!==status) return
+            bookingsHTML += `<div><strong>${book.number_plate}</strong> - ${book.service} (${book.status})</div>`
+        })
+        div.innerHTML = `<div class="plate">${b.name}</div>
+                         ${bookingsHTML}
+                         <button onclick="deleteBusiness('${b.id}')">Remove Business</button>`
+        container.appendChild(div)
+    })
+}
+window.deleteBusiness = async function(id){
+    const { error } = await supabase.from('users').delete().eq('id',id)
+    if(error) return showPopup('Error deleting business: '+error.message,true)
+    showPopup('Business removed!')
+    loadBusinesses()
+}
+
+// --- Business Dashboard ---
+document.getElementById('createBookingBtn').addEventListener('click', async ()=>{
+    const number_plate = document.getElementById('numberPlate').value;
+    const make = document.getElementById('make').value;
+    const model = document.getElementById('model').value;
+    const customer_name = document.getElementById('customerName').value;
+    const customer_email = document.getElementById('customerEmail').value;
+    const date = document.getElementById('bookingDate').value;
+    const time = document.getElementById('bookingTime').value;
+    const service = document.getElementById('service').value;
+    const status = document.getElementById('bookingStatus').value;
+    if(!number_plate||!make||!model||!customer_name||!customer_email||!date||!time||!service) return showPopup('Fill all fields!',true)
+    
+    const user = supabase.auth.user()
+    const { error } = await supabase.from('bookings').insert([{business_id:user.id,number_plate,make,model,customer_name,customer_email,date,time,service,status}])
+    if(error) return showPopup('Error creating booking: ' + error.message,true)
+    showPopup('Booking Created!')
+    loadBusinessBookings(user.id)
+})
+
+async function loadBusinessBookings(businessId){
+    const { data: bookings, error } = await supabase.from('bookings').select('*').eq('business_id',businessId)
+    if(error) return showPopup('Error loading bookings: ' + error.message,true)
+    const container = document.getElementById('businessBookings')
+    container.innerHTML = ''
+    bookings.forEach(b=>{
+        const div = document.createElement('div')
+        div.className = 'ticket'
+        div.innerHTML = `<div class="plate">${b.number_plate}</div>
+                         <div><strong>Name:</strong> <input value="${b.customer_name}" id="name_${b.id}"></div>
+                         <div><strong>Make/Model:</strong> <input value="${b.make}" id="make_${b.id}"> <input value="${b.model}" id="model_${b.id}"></div>
+                         <div><strong>Service:</strong> <input value="${b.service}" id="service_${b.id}"></div>
+                         <div><strong>Date:</strong> <input type="date" value="${b.date}" id="date_${b.id}"></div>
+                         <div><strong>Time:</strong> <input type="time" value="${b.time}" id="time_${b.id}"></div>
+                         <div><strong>Status:</strong> 
+                           <select id="status_${b.id}">
+                             <option ${b.status==='Pending'?'selected':''}>Pending</option>
+                             <option ${b.status==='Confirmed'?'selected':''}>Confirmed</option>
+                             <option ${b.status==='Completed'?'selected':''}>Completed</option>
+                             <option ${b.status==='Canceled'?'selected':''}>Canceled</option>
+                           </select>
+                         </div>
+                         <button onclick="saveBooking('${b.id}')">Save</button>
+                         <button class="downloadBtn">Download Ticket</button>`
+        container.appendChild(div)
+
+        div.querySelector('.downloadBtn').addEventListener('click', ()=>{
+            const doc = new jsPDF()
+            doc.setFontSize(16)
+            doc.text('Booking Ticket', 20, 20)
+            doc.setFontSize(14)
+            doc.text(`Number Plate: ${b.number_plate}`, 20, 40)
+            doc.text(`Name: ${b.customer_name}`, 20, 50)
+            doc.text(`Make/Model: ${b.make} ${b.model}`, 20, 60)
+            doc.text(`Service: ${b.service}`, 20, 70)
+            doc.text(`Date: ${b.date}`, 20, 80)
+            doc.text(`Time: ${b.time}`, 20, 90)
+            doc.text(`Status: ${b.status}`, 20, 100)
+            doc.save(`${b.number_plate}_ticket.pdf`)
+        })
+    })
+}
+
+window.saveBooking = async function(id){
+    const updated = {
+        customer_name: document.getElementById(`name_${id}`).value,
+        make: document.getElementById(`make_${id}`).value,
+        model: document.getElementById(`model_${id}`).value,
+        service: document.getElementById(`service_${id}`).value,
+        date: document.getElementById(`date_${id}`).value,
+        time: document.getElementById(`time_${id}`).value,
+        status: document.getElementById(`status_${id}`).value
+    }
+    const { error } = await supabase.from('bookings').update(updated).eq('id',id)
+    if(error) return showPopup('Error updating booking: '+error.message,true)
+    showPopup('Booking updated!')
+    loadBusinessBookings(supabase.auth.user().id)
+}
+</script>
+</body>
+</html>
