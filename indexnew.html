@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Garage Booking System</title>
+<style>
+  body { font-family: Arial, sans-serif; margin:0; padding:0; background:#f4f4f4;}
+  header { background:#333; color:#fff; padding:1em; text-align:center;}
+  .container { max-width:900px; margin:2em auto; padding:1em; background:#fff; border-radius:5px;}
+  input, select, button { display:block; margin:0.5em 0; padding:0.5em; width:100%; max-width:400px;}
+  .ticket { border:1px solid #333; padding:1em; margin:1em 0; border-radius:5px; background:#fafafa;}
+  .ticket .plate { font-size:1.5em; font-weight:bold; margin-bottom:0.5em;}
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header><h1>Garage Booking System</h1></header>
+<div class="container">
+
+  <!-- Login Form -->
+  <div id="loginDiv">
+    <h2>Login</h2>
+    <input type="email" id="email" placeholder="Email">
+    <input type="password" id="password" placeholder="Password">
+    <button id="loginBtn">Login</button>
+    <p id="loginError" style="color:red;"></p>
+  </div>
+
+  <!-- Super Admin Dashboard -->
+  <div id="adminDiv" class="hidden">
+    <h2>Super Admin Dashboard</h2>
+    <h3>Create Business</h3>
+    <input type="text" id="newBusinessName" placeholder="Business Name">
+    <input type="email" id="newBusinessEmail" placeholder="Business Email">
+    <input type="password" id="newBusinessPass" placeholder="Password">
+    <button id="createBusinessBtn">Create Business</button>
+    <h3>All Bookings</h3>
+    <div id="allBookings"></div>
+    <button id="logoutAdminBtn">Logout</button>
+  </div>
+
+  <!-- Business Dashboard -->
+  <div id="businessDiv" class="hidden">
+    <h2>Business Dashboard</h2>
+    <h3>Create Booking</h3>
+    <input type="text" id="numberPlate" placeholder="Number Plate">
+    <input type="text" id="make" placeholder="Make">
+    <input type="text" id="model" placeholder="Model">
+    <input type="text" id="customerName" placeholder="Customer Name">
+    <input type="email" id="customerEmail" placeholder="Customer Email">
+    <input type="date" id="bookingDate">
+    <input type="time" id="bookingTime">
+    <input type="text" id="service" placeholder="Service">
+    <select id="bookingStatus">
+      <option value="Pending">Pending</option>
+      <option value="Confirmed">Confirmed</option>
+      <option value="Completed">Completed</option>
+      <option value="Canceled">Canceled</option>
+    </select>
+    <button id="createBookingBtn">Create Booking</button>
+
+    <h3>Your Bookings</h3>
+    <div id="businessBookings"></div>
+    <button id="logoutBusinessBtn">Logout</button>
+  </div>
+
+</div>
+
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js'
+
+const supabaseUrl = 'YOUR_SUPABASE_URL'
+const supabaseKey = 'YOUR_SUPABASE_ANON_KEY'
+const supabase = createClient(supabaseUrl, supabaseKey)
+
+// Elements
+const loginDiv = document.getElementById('loginDiv')
+const adminDiv = document.getElementById('adminDiv')
+const businessDiv = document.getElementById('businessDiv')
+const emailInput = document.getElementById('email')
+const passwordInput = document.getElementById('password')
+const loginBtn = document.getElementById('loginBtn')
+const loginError = document.getElementById('loginError')
+const logoutAdminBtn = document.getElementById('logoutAdminBtn')
+const logoutBusinessBtn = document.getElementById('logoutBusinessBtn')
+
+// Login
+loginBtn.addEventListener('click', async () => {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: emailInput.value,
+    password: passwordInput.value
+  })
+  if(error) { loginError.textContent = error.message; return }
+
+  const { data: profile } = await supabase.from('users').select('*').eq('id', data.user.id).single()
+  if(profile.role === 'super_admin'){
+    loginDiv.classList.add('hidden')
+    adminDiv.classList.remove('hidden')
+    loadAllBookings()
+  } else {
+    loginDiv.classList.add('hidden')
+    businessDiv.classList.remove('hidden')
+    loadBusinessBookings(profile.id)
+  }
+})
+
+// Logout
+logoutAdminBtn.addEventListener('click', async () => {
+  await supabase.auth.signOut()
+  location.reload()
+})
+logoutBusinessBtn.addEventListener('click', async () => {
+  await supabase.auth.signOut()
+  location.reload()
+})
+
+// --- Super Admin Actions ---
+document.getElementById('createBusinessBtn').addEventListener('click', async () => {
+  const name = document.getElementById('newBusinessName').value
+  const email = document.getElementById('newBusinessEmail').value
+  const password = document.getElementById('newBusinessPass').value
+  if(!name || !email || !password) return alert('Fill all fields')
+
+  // Create auth user
+  const { data:user, error:userError } = await supabase.auth.admin.createUser({email, password})
+  if(userError) return alert(userError.message)
+
+  // Insert into users table
+  await supabase.from('users').insert([{id:user.id, email, role:'business', business_name:name, status:'active'}])
+  alert('Business Created!')
+})
+
+// Load All Bookings
+async function loadAllBookings(){
+  const { data: bookings } = await supabase.from('bookings').select('*')
+  const container = document.getElementById('allBookings')
+  container.innerHTML = ''
+  bookings.forEach(b => {
+    const div = document.createElement('div')
+    div.className = 'ticket'
+    div.innerHTML = `<div class="plate">${b.number_plate}</div>
+                     <div>Name: ${b.customer_name}</div>
+                     <div>Make/Model: ${b.make} ${b.model}</div>
+                     <div>Service: ${b.service}</div>
+                     <div>Date: ${b.date}</div>
+                     <div>Time: ${b.time}</div>
+                     <div>Status: ${b.status}</div>`
+    container.appendChild(div)
+  })
+}
+
+// --- Business Actions ---
+document.getElementById('createBookingBtn').addEventListener('click', async () => {
+  const number_plate = document.getElementById('numberPlate').value
+  const make = document.getElementById('make').value
+  const model = document.getElementById('model').value
+  const customer_name = document.getElementById('customerName').value
+  const customer_email = document.getElementById('customerEmail').value
+  const date = document.getElementById('bookingDate').value
+  const time = document.getElementById('bookingTime').value
+  const service = document.getElementById('service').value
+  const status = document.getElementById('bookingStatus').value
+
+  if(!number_plate || !make || !model || !customer_name || !customer_email || !date || !time || !service) return alert('Fill all fields')
+
+  const user = supabase.auth.user()
+  await supabase.from('bookings').insert([{business_id:user.id, number_plate, make, model, customer_name, customer_email, date, time, service, status}])
+  alert('Booking Created!')
+  loadBusinessBookings(user.id)
+})
+
+async function loadBusinessBookings(businessId){
+  const { data: bookings } = await supabase.from('bookings').select('*').eq('business_id', businessId)
+  const container = document.getElementById('businessBookings')
+  container.innerHTML = ''
+  bookings.forEach(b => {
+    const div = document.createElement('div')
+    div.className = 'ticket'
+    div.innerHTML = `<div class="plate">${b.number_plate}</div>
+                     <div>Name: ${b.customer_name}</div>
+                     <div>Make/Model: ${b.make} ${b.model}</div>
+                     <div>Service: ${b.service}</div>
+                     <div>Date: ${b.date}</div>
+                     <div>Time: ${b.time}</div>
+                     <div>Status: ${b.status}</div>`
+    container.appendChild(div)
+  })
+}
+</script>
+</body>
+</html>
